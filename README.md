@@ -36,6 +36,37 @@ agent-rust/
 | Screenshot Capture | <100ms |
 | Activity Detection | <10ms |
 
+## 🚀 Quick Install
+
+### One-Line Installation
+
+**Linux / macOS:**
+```bash
+curl -sSL https://raw.githubusercontent.com/ajariapps/agent-employe/main/install.sh | sudo bash -s http://your-server:8080
+```
+
+**Windows (.exe Installer):**
+> Download `Agent-Setup.exe` from [Releases](https://github.com/ajariapps/agent-employe/releases/latest) and double-click to install.
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/ajariapps/agent-employe/main/install.ps1 | iex
+```
+
+### What Gets Installed
+
+- ✅ Binary installed to `/usr/local/bin/agent` (Linux/macOS) or `C:\Program Files\AgentRust\` (Windows)
+- ✅ System service created and started
+- ✅ Auto-start enabled on boot
+- ✅ Auto-registered with your server
+- ✅ Monitoring begins immediately
+
+### Quick Links
+
+- 📖 [Quick Install Guide](docs/QUICK_INSTALL.md) - Copy-paste commands for all platforms
+- 📚 [Full Installation Guide](docs/INSTALLATION.md) - Detailed instructions with troubleshooting
+- 🔧 [Configuration](#configuration) - Configure intervals, thresholds, and more
+
 ## Quick Start
 
 ### Quick Install (Recommended)
@@ -49,24 +80,6 @@ cargo build --release
 
 # Install with one command
 sudo ./scripts/install-simple.sh http://your-server:8080
-```
-
-The agent will:
-- Install to `/usr/local/bin/agent`
-- Create a systemd service
-- **Enable autostart on boot**
-- Auto-register with the server
-- Start monitoring immediately
-
-#### Windows (PowerShell as Administrator)
-
-```powershell
-# Build the agent
-cd agent-rust
-cargo build --release
-
-# Install with one command
-.\scripts\install-simple.ps1 http://your-server:8080
 ```
 
 #### Useful Commands
@@ -387,7 +400,8 @@ This agent captures screenshots and tracks window activity. Ensure compliance wi
 
 ## Support
 
-- Documentation: [docs/](docs/)
-- Autostart Configuration: [docs/AUTOSTART_CONFIGURATION.md](docs/AUTOSTART_CONFIGURATION.md)
-- Issues: [GitHub Issues](https://github.com/ajariapps/agent-employe/issues)
-- Email: support@yourcompany.com
+- **Quick Install**: [docs/QUICK_INSTALL.md](docs/QUICK_INSTALL.md)
+- **Full Installation**: [docs/INSTALLATION.md](docs/INSTALLATION.md)
+- **Service Configuration**: [docs/SERVICE_INSTALLATION.md](docs/SERVICE_INSTALLATION.md)
+- **Autostart Configuration**: [docs/AUTOSTART_CONFIGURATION.md](docs/AUTOSTART_CONFIGURATION.md)
+- **Issues**: [GitHub Issues](https://github.com/ajariapps/agent-employe/issues)

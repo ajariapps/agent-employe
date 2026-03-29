@@ -8,9 +8,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 $BinaryPath = "C:\Program Files\AgentRust\agent.exe"
 $ServiceName = "AgentRust"
 $DisplayName = "Employee Monitoring Agent"
+$GITHUB_REPO = "ajariapps/agent-employe"
 
 # Check if running as Administrator
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -19,7 +21,111 @@ if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Adm
     exit 1
 }
 
-# Find the binary
+#######################################
+# Helper Functions
+#######################################
+function Get-Architecture {
+    $arch = [System.Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
+    if ($arch -eq "AMD64") {
+        return "x64"
+    } elseif ($arch -eq "ARM64") {
+        return "arm64"
+    } else {
+        return "unknown"
+    }
+}
+
+function Get-PlatformFilename {
+    param([string]$Arch)
+    if ($Arch -eq "x64") {
+        return "agent-rust-windows-x64.tar.gz"
+    } elseif ($Arch -eq "arm64") {
+        return "agent-rust-windows-arm64.tar.gz"
+    } else {
+        return ""
+    }
+}
+
+function Download-FromGitHub {
+    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Blue
+    Write-Host "Binary not found locally. Downloading from GitHub..." -ForegroundColor Blue
+    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Blue
+    Write-Host ""
+
+    # Detect architecture
+    $arch = Get-Architecture
+    if ($arch -eq "unknown") {
+        Write-Host "Error: Unsupported architecture" -ForegroundColor Red
+        return $null
+    }
+
+    Write-Host "Detected: Windows ($arch)"
+
+    # Get filename
+    $filename = Get-PlatformFilename -Arch $arch
+    if ([string]::IsNullOrEmpty($filename)) {
+        Write-Host "Error: Could not determine download filename" -ForegroundColor Red
+        return $null
+    }
+
+    # Get latest version
+    Write-Host "Fetching latest version..."
+    try {
+        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+        $version = $response.tag_name
+        Write-Host "Latest version: $version"
+    } catch {
+        Write-Host "Error: Could not fetch latest version" -ForegroundColor Red
+        return $null
+    }
+
+    # Download
+    $downloadUrl = "https://github.com/${GITHUB_REPO}/releases/download/${version}/${filename}"
+    Write-Host "Downloading from: $downloadUrl"
+
+    $tempDir = Join-Path $env:TEMP "agent-download-$([Guid]::NewGuid())"
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+
+    $archivePath = Join-Path $tempDir $filename
+
+    try {
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
+        Write-Host "Download successful" -ForegroundColor Green
+    } catch {
+        Write-Host "Error: Download failed" -ForegroundColor Red
+        return $null
+    }
+
+    # Extract
+    Write-Host "Extracting..."
+    try {
+        $extractDir = Join-Path $tempDir "extracted"
+        New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+
+        Push-Location $extractDir
+        tar -xzf $archivePath
+        Pop-Location
+
+        $binaryPath = Join-Path $extractDir "agent.exe"
+
+        if (Test-Path $binaryPath) {
+            # Register cleanup
+            Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
+                Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+            } -ErrorAction SilentlyContinue | Out-Null
+
+            return $binaryPath
+        } else {
+            Write-Host "Error: Binary not found in archive" -ForegroundColor Red
+            return $null
+        }
+    } catch {
+        Write-Host "Error: Failed to extract archive" -ForegroundColor Red
+        return $null
+    }
+}
+
+# Find the binary (try release first, then debug, then download)
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $source = Join-Path $scriptDir "..\target\release\agent.exe"
 
@@ -28,10 +134,20 @@ if (-not (Test-Path $source)) {
 }
 
 if (-not (Test-Path $source)) {
-    Write-Host "Error: Binary not found at target\release\agent.exe or target\debug\agent.exe" -ForegroundColor Red
-    Write-Host "Please build the agent first:" -ForegroundColor Yellow
-    Write-Host "  cd .. && cargo build --release"
-    exit 1
+    $source = Download-FromGitHub
+    if ([string]::IsNullOrEmpty($source) -or -not (Test-Path $source)) {
+        Write-Host ""
+        Write-Host "Error: Could not find or download binary" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Please do one of the following:" -ForegroundColor Yellow
+        Write-Host "  1. Build the agent: cd .. ; cargo build --release"
+        Write-Host "  2. Check your internet connection"
+        Write-Host "  3. Download manually from: https://github.com/${GITHUB_REPO}/releases"
+        exit 1
+    }
+    $downloaded = $true
+} else {
+    $downloaded = $false
 }
 
 Write-Host "Installing Employee Monitoring Agent (Rust)..." -ForegroundColor Green
@@ -102,5 +218,12 @@ if ($service -and $service.Status -eq 'Running') {
     Write-Host "Warning: Service may not have started successfully" -ForegroundColor Red
     Write-Host "Check status with: Get-Service $ServiceName"
     Write-Host "Check Event Logs for errors"
+
+    # Cleanup if downloaded
+    if ($downloaded) {
+        if ($source -and (Test-Path (Split-Path $source -Parent))) {
+            Remove-Item -Path (Split-Path $source -Parent) -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
     exit 1
 }

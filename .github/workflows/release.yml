@@ -55,7 +55,7 @@ jobs:
           mkdir -p release
           strip target/release/agent -o release/agent
           tar czf agent-rust-linux-x86_64.tar.gz -C release agent
-          md5sum agent-rust-linux-x86_64.tar.gz > checksums.txt
+          sha256sum agent-rust-linux-x86_64.tar.gz > checksums.txt
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
@@ -105,14 +105,13 @@ jobs:
           mkdir -p release
           cp target/x86_64-apple-darwin/release/agent release/agent
           tar czf agent-rust-macos-x86_64.tar.gz -C release agent
-          md5sum agent-rust-macos-x86_64.tar.gz >> checksums.txt
+          shasum -a 256 agent-rust-macos-x86_64.tar.gz >> checksums.txt
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
           name: macos-x86_64
-          path: |
-            agent-rust-macos-x86_64.tar.gz
+          path: agent-rust-macos-x86_64.tar.gz
           if-no-files-found: error
 
   build-macos-arm64:
@@ -155,14 +154,13 @@ jobs:
           mkdir -p release
           cp target/aarch64-apple-darwin/release/agent release/agent
           tar czf agent-rust-macos-arm64.tar.gz -C release agent
-          md5sum agent-rust-macos-arm64.tar.gz >> checksums.txt
+          shasum -a 256 agent-rust-macos-arm64.tar.gz >> checksums.txt
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
           name: macos-arm64
-          path: |
-            agent-rust-macos-arm64.tar.gz
+          path: agent-rust-macos-arm64.tar.gz
           if-no-files-found: error
 
   build-windows:
@@ -206,16 +204,73 @@ jobs:
           tar -czf agent-rust-windows-x64.tar.gz -C release agent.exe
         shell: pwsh
 
+      - name: Calculate checksum
+        run: |
+          if (Get-Command sha256sum -ErrorAction SilentlyContinue) {
+            sha256sum agent-rust-windows-x64.tar.gz > checksums.txt
+          } else {
+            (Get-FileHash agent-rust-windows-x64.tar.gz -Algorithm SHA256).Hash + "  agent-rust-windows-x64.tar.gz" | Out-File -Encoding ASCII checksums.txt
+          }
+        shell: pwsh
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
           name: windows-x64
-          path: agent-rust-windows-x64.tar.gz
+          path: |
+            agent-rust-windows-x64.tar.gz
+            checksums.txt
           if-no-files-found: error
+
+  build-windows-installer:
+    name: Build Windows .exe Installer
+    needs: build-windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Windows binary
+        uses: actions/download-artifact@v3
+        with:
+          name: windows-x64
+          path: artifacts
+
+      - name: Extract Windows binary
+        run: |
+          tar -xzf artifacts/agent-rust-windows-x64.tar.gz
+        shell: pwsh
+
+      - name: Install NSIS
+        run: |
+          choco install nsis -y
+        shell: pwsh
+
+      - name: Create installer directory
+        run: |
+          mkdir installer-windows\output
+          copy agent.exe installer-windows\agent.exe
+        shell: pwsh
+
+      - name: Build .exe installer
+        run: |
+          $nsisPath = "C:\Program Files (x86)\NSIS\makensis.exe"
+          if (-not (Test-Path $nsisPath)) {
+            $nsisPath = "C:\Program Files\NSIS\makensis.exe"
+          }
+          & $nsisPath "/DOUTPUT_FILE=installer-windows\output\Agent-Setup.exe" installer-windows\agent-setup.nsi
+        shell: pwsh
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-installer
+          path: installer-windows\output\Agent-Setup.exe
+          if-no-files-found: warn
 
   create-release:
     name: Create GitHub Release
-    needs: [build-linux, build-macos-x86_64, build-macos-arm64, build-windows]
+    needs: [build-linux, build-macos-x86_64, build-macos-arm64, build-windows, build-windows-installer]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -228,6 +283,18 @@ jobs:
         with:
           path: artifacts
 
+      - name: Prepare installer scripts
+        run: |
+          cp install.sh artifacts/
+          cp install.ps1 artifacts/
+
+      - name: Combine checksums
+        run: |
+          echo "# SHA256 Checksums" > checksums.txt
+          echo "" >> checksums.txt
+          find artifacts -name "checksums.txt" -exec cat {} \; >> checksums.txt
+          sort checksums.txt -o checksums.txt
+
       - name: Display structure of downloaded files
         run: ls -R artifacts
 
@@ -236,23 +303,58 @@ jobs:
         with:
           files: |
             artifacts/linux-x86_64/agent-rust-linux-x86_64.tar.gz
-            artifacts/linux-x86_64/checksums.txt
             artifacts/macos-x86_64/agent-rust-macos-x86_64.tar.gz
             artifacts/macos-arm64/agent-rust-macos-arm64.tar.gz
             artifacts/windows-x64/agent-rust-windows-x64.tar.gz
+            artifacts/windows-installer/Agent-Setup.exe
+            checksums.txt
+            install.sh
+            install.ps1
           generate_release_notes: true
           body: |
             ## Employee Monitoring Agent - ${{ github.ref_name }}
 
-            ### Installation
+            ### 🚀 Quick Install
 
-            See [INSTALLATION.md](https://github.com/ajariapps/agent-employe/blob/main/docs/INSTALLATION.md) for detailed instructions.
-
-            ### Quick Install (Linux)
+            **Linux / macOS:**
             ```bash
-            wget https://github.com/ajariapps/agent-employe/releases/latest/download/agent-rust-linux-x86_64.tar.gz
-            tar xzf agent-rust-linux-x86_64.tar.gz
-            sudo ./install-simple.sh http://your-server:8080
+            curl -sSL https://raw.githubusercontent.com/ajariapps/agent-employe/main/install.sh | sudo bash -s http://your-server:8080
             ```
+
+            **Windows (.exe Installer):**
+            1. Download `Agent-Setup.exe`
+            2. Double-click to install
+            3. Enter your server URL when prompted
+
+            **Windows (PowerShell):**
+            ```powershell
+            irm https://raw.githubusercontent.com/ajariapps/agent-employe/main/install.ps1 | iex
+            ```
+
+            ### 📦 Manual Download
+
+            - **Linux x64**: `agent-rust-linux-x86_64.tar.gz`
+            - **macOS Intel**: `agent-rust-macos-x86_64.tar.gz`
+            - **macOS Apple Silicon**: `agent-rust-macos-arm64.tar.gz`
+            - **Windows**: `Agent-Setup.exe` (recommended) or `agent-rust-windows-x64.tar.gz`
+
+            ### 📋 Verification
+
+            Verify downloads with SHA256 checksums:
+            ```bash
+            sha256sum -c checksums.txt
+            ```
+
+            ### 📖 Documentation
+
+            - [Installation Guide](https://github.com/ajariapps/agent-employe/blob/main/docs/INSTALLATION.md)
+            - [Quick Install Guide](https://github.com/ajariapps/agent-employe/blob/main/docs/QUICK_INSTALL.md)
+            - [README](https://github.com/ajariapps/agent-employe/blob/main/README.md)
+
+            ### ⚠️ Privacy Notice
+
+            This agent captures screenshots and tracks window activity for employee monitoring purposes.
+            Ensure compliance with local privacy laws and regulations. Employees should be informed about monitoring.
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
