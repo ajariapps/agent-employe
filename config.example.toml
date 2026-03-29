@@ -1,0 +1,69 @@
+# Employee Monitoring Agent Configuration
+
+[server]
+# Server URL for API communication
+url = "http://localhost:8080"
+# Request timeout in seconds
+timeout_secs = 30
+# Connection timeout in seconds
+connect_timeout_secs = 10
+# Maximum retry attempts for failed requests
+max_retries = 3
+
+[agent]
+# Hostname to report (auto-detected if not set)
+# hostname = "my-computer"
+# Override auto-detected hostname
+override_hostname = false
+# Data directory for storage (platform-specific default)
+# data_dir = "/var/lib/agent-rust"
+# Cache directory (platform-specific default)
+# cache_dir = "/var/cache/agent-rust"
+# Queue file path
+queue_file = "/var/lib/agent-rust/queue.json"
+
+[intervals]
+# Heartbeat interval in seconds (minimum: 10)
+heartbeat_secs = 30
+# Activity tracking interval in seconds (minimum: 5)
+activity_secs = 60
+# Screenshot interval in seconds (minimum: 30)
+screenshot_secs = 300
+# Update check interval in seconds
+update_check_secs = 3600
+
+[thresholds]
+# Idle threshold in seconds
+idle_secs = 300
+# Maximum queue size in bytes (100 MB)
+queue_max_bytes = 104857600
+# Maximum queue items
+queue_max_items = 10000
+
+[logging]
+# Log level: trace, debug, info, warn, error
+level = "info"
+# Log format: json, pretty, compact
+format = "json"
+# Log directory (platform-specific default)
+# dir = "/var/log/agent-rust"
+# Maximum number of log files to keep
+max_files = 10
+# Maximum log file size in MB
+max_file_size_mb = 100
+# Log to console
+console = true
+# Log to file
+file = true
+
+[screenshot]
+# Image format: png, jpeg
+format = "png"
+# JPEG quality (1-100, only for JPEG format)
+jpeg_quality = 85
+# Capture all monitors
+capture_all_monitors = false
+# Compress screenshots before sending
+compress = true
+# Maximum screenshot dimension (width or height)
+# max_dimension = 1920

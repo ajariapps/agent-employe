@@ -1,0 +1,34 @@
+[package]
+name = "agent-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+config = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }
+secrecy = { workspace = true }
+
+# Validation
+url = "2.5.4"
+num_cpus = "1.16.0"
+
+# System info
+sysinfo = { workspace = true }
+
+# HTTP client
+reqwest = { workspace = true }
+
+# Encoding
+base64 = { workspace = true }

@@ -1,0 +1,47 @@
+[package]
+name = "agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "agent"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+agent-core = { path = "../../crates/agent-core" }
+platform = { path = "../../crates/platform" }
+client = { path = "../../crates/client" }
+activity = { path = "../../crates/activity" }
+screenshot = { path = "../../crates/screenshot" }
+idle = { path = "../../crates/idle" }
+updater = { path = "../../crates/updater" }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+chrono = { workspace = true }
+
+# CLI parsing
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# Image processing
+image = { workspace = true }
+
+# System info
+sysinfo = { workspace = true }
+
+# Security
+secrecy = { workspace = true }
+
+# Platform-specific signal handling
+[target.'cfg(unix)'.dependencies]
+tokio = { workspace = true, features = ["signal"] }
+
+[target.'cfg(windows)'.dependencies]
+tokio = { workspace = true, features = ["signal"] }
+windows-sys = "0.59"

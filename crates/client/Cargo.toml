@@ -1,0 +1,24 @@
+[package]
+name = "client"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+agent-core = { path = "../agent-core" }
+reqwest = { workspace = true }
+backoff = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+secrecy = { workspace = true }
+
+# Testing
+tempfile = "3.14"

@@ -1,0 +1,47 @@
+[Unit]
+Description=Employee Monitoring Agent
+Documentation=https://gitlab.ajari.app/ridwanajari/agent-emp
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+[Service]
+# Run as a regular user (recommended)
+User=agent
+Group=agent
+
+# Service configuration
+Type=simple
+ExecStart=/usr/local/bin/agent run --config /etc/agent-rust/config.toml
+
+# Auto-restart configuration
+Restart=always
+RestartSec=10s
+
+# Start service on system boot
+# The service will be started by systemd when the system reaches multi-user.target
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/agent-rust
+ReadWritePaths=/var/log/agent-rust
+ReadWritePaths=/run/agent-rust
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=50%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agent-rust
+
+# Watchdog (optional - uncomment if needed)
+# WatchdogSec=180
+
+[Install]
+WantedBy=multi-user.target
