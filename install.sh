@@ -14,6 +14,11 @@
 
 set -e
 
+# Set SCRIPT_URL if piped (typically via curl from GitHub)
+if [[ -z "$SCRIPT_URL" ]]; then
+    SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/main/install.sh"
+fi
+
 #######################################
 # Configuration
 #######################################
