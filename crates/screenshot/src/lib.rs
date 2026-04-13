@@ -146,9 +146,8 @@ mod linux {
 
                 if ximage.is_null() {
                     x11::xlib::XFreeGC(display, gc);
-                    return Err(agent_core::AgentError::Screenshot(
-                        "Failed to capture screen: XGetImage returned null".to_string(),
-                    ));
+                    // Fall back to external tool for Wayland
+                    return self.capture_with_fallback();
                 }
 
                 // Get image properties
@@ -230,6 +229,62 @@ mod linux {
 
                 rgb_data
             }
+        }
+
+        fn capture_with_fallback(&self) -> Result<Screenshot> {
+            use std::process::Command;
+            use std::io::Read;
+
+            // Try grim (Wayland screenshot tool)
+            if let Ok(output) = Command::new("grim")
+                .arg("-")
+                .output()
+            {
+                if output.status.success() && !output.stdout.is_empty() {
+                    tracing::info!("Captured screenshot using grim");
+                    return Ok(Screenshot::new(
+                        output.stdout,
+                        1920, // Default, will be updated from PNG
+                        1080,
+                        ImageFormat::Png,
+                        "Unknown".to_string(),
+                        "Unknown".to_string(),
+                    ));
+                }
+            }
+
+            // Try gnome-screenshot
+            let temp_file = "/tmp/agent-screenshot-fallback.png";
+            let _ = std::fs::remove_file(temp_file);
+
+            if let Ok(_) = Command::new("gnome-screenshot")
+                .arg("-f")
+                .arg(temp_file)
+                .output()
+            {
+                // Give it a moment to capture
+                std::thread::sleep(std::time::Duration::from_millis(100));
+
+                if let Ok(mut data) = std::fs::read(temp_file) {
+                    let _ = std::fs::remove_file(temp_file);
+                    tracing::info!("Captured screenshot using gnome-screenshot");
+                    return Ok(Screenshot::new(
+                        data,
+                        1920,
+                        1080,
+                        ImageFormat::Png,
+                        "Unknown".to_string(),
+                        "Unknown".to_string(),
+                    ));
+                }
+            }
+
+            // No fallback available
+            tracing::error!("Screenshot failed: X11 capture failed and no Wayland screenshot tool available");
+            tracing::error!("Install 'grim' or 'gnome-screenshot' for Wayland support");
+            Err(agent_core::AgentError::Screenshot(
+                "Screenshot failed on Wayland. Install 'grim' or 'gnome-screenshot'".to_string(),
+            ))
         }
     }
 

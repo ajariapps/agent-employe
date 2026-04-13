@@ -44,13 +44,15 @@ Panduan lengkap untuk menginstal Employee Monitoring Agent di Linux, macOS, dan 
 
 Cara termudah untuk menginstal agent dengan satu perintah:
 
+
+
 ```bash
 # 1. Download dan extract release
 wget https://github.com/ajariapps/agent-employe/releases/latest/download/agent-rust-linux-x86_64.tar.gz
 tar xzf agent-rust-linux-x86_64.tar.gz
 
 # 2. Jalankan installer
-sudo ./scripts/install-simple.sh http://your-server:8080
+sudo ./scripts/install-simple.sh https://server-emp.ajari.ai
 ```
 
 Installer akan:

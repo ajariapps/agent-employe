@@ -15,7 +15,6 @@ NC='\033[0m' # No Color
 # Configuration
 GITHUB_REPO="ajariapps/agent-employe"
 BINARY_PATH="/usr/local/bin/agent"
-SERVICE_FILE="/etc/systemd/system/agent-rust.service"
 
 # Get server URL from argument
 SERVER_URL="$1"
@@ -189,12 +188,35 @@ echo -e "${GREEN}✓ Binary installed${NC}"
 echo "Creating service..."
 
 if [[ "$OS" == "linux" ]]; then
-    # Create systemd service file
-    cat > "$SERVICE_FILE" << EOF
+    # Get the username of the sudo user
+    REAL_USER="${SUDO_USER:-$USER}"
+    USER_HOME=$(eval echo ~$REAL_USER)
+
+    # Detect display environment variables from the user's session
+    CURRENT_DISPLAY="${DISPLAY:-:0}"
+    CURRENT_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}"
+    CURRENT_XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-}"
+    CURRENT_XAUTHORITY="$USER_HOME/.Xauthority"
+
+    # Try to get Wayland display from loginctl if not set
+    if [[ -z "$CURRENT_WAYLAND_DISPLAY" ]]; then
+        CURRENT_WAYLAND_DISPLAY=$(loginctl show-session "$(loginctl | grep "$REAL_USER" | awk '{print $1}')" -p Display 2>/dev/null | cut -d= -f2)
+        if [[ -z "$CURRENT_WAYLAND_DISPLAY" ]]; then
+            CURRENT_WAYLAND_DISPLAY="wayland-0"
+        fi
+    fi
+
+    # Create systemd USER service file (runs as user, not root)
+    USER_SERVICE_DIR="$USER_HOME/.config/systemd/user"
+    USER_SERVICE_FILE="$USER_SERVICE_DIR/agent-rust.service"
+
+    mkdir -p "$USER_SERVICE_DIR"
+
+    cat > "$USER_SERVICE_FILE" << EOF
 [Unit]
 Description=Employee Monitoring Agent
 Documentation=https://github.com/${GITHUB_REPO}
-After=network-online.target
+After=graphical-session.target network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=500
 StartLimitBurst=5
@@ -206,9 +228,11 @@ Restart=always
 RestartSec=10s
 Environment="AGENT_SERVER_URL=$SERVER_URL"
 
-# Security hardening
-NoNewPrivileges=true
-PrivateTmp=true
+# Display access for screenshots (Wayland + X11)
+Environment="DISPLAY=$CURRENT_DISPLAY"
+Environment="WAYLAND_DISPLAY=$CURRENT_WAYLAND_DISPLAY"
+Environment="XAUTHORITY=$CURRENT_XAUTHORITY"
+Environment="XDG_SESSION_TYPE=$CURRENT_XDG_SESSION_TYPE"
 
 # Logging
 StandardOutput=journal
@@ -216,19 +240,45 @@ StandardError=journal
 SyslogIdentifier=agent-rust
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
 
-    # Enable and start service
-    echo "Enabling and starting service"
-    systemctl daemon-reload
-    systemctl enable agent-rust
-    systemctl restart agent-rust
+    chown "$REAL_USER:$REAL_USER" "$USER_SERVICE_FILE"
+
+    # Stop and remove old system service if it exists
+    if systemctl is-active --quiet agent-rust 2>/dev/null; then
+        systemctl stop agent-rust
+    fi
+    if systemctl is-enabled --quiet agent-rust 2>/dev/null; then
+        systemctl disable agent-rust
+    fi
+    if [[ -f "/etc/systemd/system/agent-rust.service" ]]; then
+        rm -f "/etc/systemd/system/agent-rust.service"
+        systemctl daemon-reload
+    fi
+
+    # Enable and start user service
+    # Need to run user commands in a login shell to preserve DBUS environment
+    echo "Enabling and starting service for user $REAL_USER"
+
+    # Use machinectl to run commands in the user's login session
+    if machinectl shell --uid="$REAL_USER" .host -- systemctl --user daemon-reload 2>/dev/null; then
+        machinectl shell --uid="$REAL_USER" .host -- systemctl --user enable agent-rust
+        machinectl shell --uid="$REAL_USER" .host -- systemctl --user restart agent-rust
+    else
+        # Fallback: use su with login shell to get proper environment
+        su - "$REAL_USER" -c "systemctl --user daemon-reload"
+        su - "$REAL_USER" -c "systemctl --user enable agent-rust"
+        su - "$REAL_USER" -c "systemctl --user restart agent-rust"
+    fi
+
+    # Enable lingering so service starts on boot/login
+    loginctl enable-linger "$REAL_USER"
     echo -e "${GREEN}✓ Service started${NC}"
 
     # Show status
     sleep 2
-    if systemctl is-active --quiet agent-rust; then
+    if su - "$REAL_USER" -c "systemctl --user is-active --quiet agent-rust"; then
         SUCCESS=true
     else
         SUCCESS=false
@@ -299,17 +349,17 @@ if [[ "$SUCCESS" == true ]]; then
 
     if [[ "$OS" == "linux" ]]; then
         echo "Useful commands:"
-        echo "  Check status:  sudo systemctl status agent-rust"
-        echo "  View logs:     sudo journalctl -u agent-rust -f"
-        echo "  Stop agent:    sudo systemctl stop agent-rust"
-        echo "  Start agent:   sudo systemctl start agent-rust"
+        echo "  Check status:  systemctl --user status agent-rust"
+        echo "  View logs:     journalctl --user -u agent-rust -f"
+        echo "  Stop agent:    systemctl --user stop agent-rust"
+        echo "  Start agent:   systemctl --user start agent-rust"
         echo ""
         echo "Uninstall:"
-        echo "  sudo systemctl stop agent-rust"
-        echo "  sudo systemctl disable agent-rust"
-        echo "  sudo rm $SERVICE_FILE"
+        echo "  systemctl --user stop agent-rust"
+        echo "  systemctl --user disable agent-rust"
+        echo "  rm $USER_SERVICE_FILE"
         echo "  sudo rm $BINARY_PATH"
-        echo "  sudo systemctl daemon-reload"
+        echo "  systemctl --user daemon-reload"
     elif [[ "$OS" == "macos" ]]; then
         echo "Useful commands:"
         echo "  View logs:     sudo log show --predicate 'process == \"agent\"' --last 1h"
@@ -323,6 +373,6 @@ if [[ "$SUCCESS" == true ]]; then
     fi
 else
     echo -e "${RED}Warning: Service may not have started successfully${NC}"
-    echo "Check status with: sudo systemctl status agent-rust"
+    echo "Check status with: systemctl --user status agent-rust"
     exit 1
 fi
