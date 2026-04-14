@@ -65,6 +65,176 @@ jobs:
             agent-rust-linux-x86_64.tar.gz
             checksums.txt
 
+  build-linux-deb:
+    name: Build Linux .deb Package
+    needs: build-linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libx11-dev libxrandr-dev libxext-dev libxtst-dev libxrender-dev libxfixes-dev libxi-dev pkg-config
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          override: true
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-deb-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build .deb package
+        run: cargo deb --target x86_64-unknown-linux-gnu
+
+      - name: Calculate checksum
+        run: |
+          cd target/x86_64-unknown-linux-gnu/debian
+          sha256sum *.deb > checksums-deb.txt
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-deb
+          path: target/x86_64-unknown-linux-gnu/debian/*.deb
+          if-no-files-found: error
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-deb-checksums
+          path: target/x86_64-unknown-linux-gnu/debian/checksums-deb.txt
+
+  build-linux-arm64:
+    name: Build Linux ARM64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libx11-dev libxrandr-dev libxext-dev libxtst-dev libxrender-dev libxfixes-dev libxi-dev pkg-config
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          target: aarch64-unknown-linux-gnu
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: cargo build --release --bin agent --target aarch64-unknown-linux-gnu
+
+      - name: Create release package
+        run: |
+          mkdir -p release
+          strip target/aarch64-unknown-linux-gnu/release/agent -o release/agent
+          tar czf agent-rust-linux-arm64.tar.gz -C release agent
+          sha256sum agent-rust-linux-arm64.tar.gz >> checksums.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-arm64
+          path: agent-rust-linux-arm64.tar.gz
+
+  build-linux-arm64-deb:
+    name: Build Linux ARM64 .deb Package
+    needs: build-linux-arm64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libx11-dev libxrandr-dev libxext-dev libxtst-dev libxrender-dev libxfixes-dev libxi-dev pkg-config
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          target: aarch64-unknown-linux-gnu
+          override: true
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-deb-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build .deb package
+        run: cargo deb --target aarch64-unknown-linux-gnu
+
+      - name: Calculate checksum
+        run: |
+          cd target/aarch64-unknown-linux-gnu/debian
+          sha256sum *.deb > checksums-deb.txt
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-arm64-deb
+          path: target/aarch64-unknown-linux-gnu/debian/*.deb
+          if-no-files-found: warn
+
   build-macos-x86_64:
     name: Build macOS x86_64
     runs-on: macos-12
@@ -163,6 +333,65 @@ jobs:
           path: agent-rust-macos-arm64.tar.gz
           if-no-files-found: error
 
+  build-macos-dmg:
+    name: Build macOS .dmg Installer
+    needs: [build-macos-x86_64, build-macos-arm64]
+    runs-on: macos-12
+    strategy:
+      matrix:
+        target: [x86_64, arm64]
+        target_triple: [x86_64-apple-darwin, aarch64-apple-darwin]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          target: ${{ matrix.target_triple }}
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: cargo build --release --bin agent --target ${{ matrix.target_triple }}
+
+      - name: Build .dmg
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          ./packaging/macos/build-dmg.sh
+        env:
+          VERSION: ${{ github.ref_name }}
+
+      - name: Calculate checksum
+        run: |
+          cd target
+          shasum -a 256 *.dmg > checksums-dmg.txt
+
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-dmg-${{ matrix.target }}
+          path: target/*.dmg
+          if-no-files-found: warn
+
   build-windows:
     name: Build Windows x64
     runs-on: windows-latest
@@ -258,19 +487,31 @@ jobs:
           if (-not (Test-Path $nsisPath)) {
             $nsisPath = "C:\Program Files\NSIS\makensis.exe"
           }
-          & $nsisPath "/DOUTPUT_FILE=installer-windows\output\Agent-Setup.exe" installer-windows\agent-setup.nsi
+          & $nsisPath "/DOUTPUT_FILE=installer-windows\output\Agent-Setup.exe" "/DVERSION=${GITHUB_REF#refs/tags/}" installer-windows\agent-setup.nsi
+        shell: pwsh
+
+      - name: Calculate checksum
+        run: |
+          cd installer-windows\output
+          if (Get-Command sha256sum -ErrorAction SilentlyContinue) {
+            sha256sum Agent-Setup.exe > checksums-installer.txt
+          } else {
+            (Get-FileHash Agent-Setup.exe -Algorithm SHA256).Hash + "  Agent-Setup.exe" | Out-File -Encoding ASCII checksums-installer.txt
+          }
         shell: pwsh
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v3
         with:
           name: windows-installer
-          path: installer-windows\output\Agent-Setup.exe
+          path: |
+            installer-windows\output\Agent-Setup.exe
+            installer-windows\output\checksums-installer.txt
           if-no-files-found: warn
 
   create-release:
     name: Create GitHub Release
-    needs: [build-linux, build-macos-x86_64, build-macos-arm64, build-windows, build-windows-installer]
+    needs: [build-linux, build-linux-deb, build-linux-arm64, build-linux-arm64-deb, build-macos-x86_64, build-macos-arm64, build-macos-dmg, build-windows, build-windows-installer]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -292,7 +533,7 @@ jobs:
         run: |
           echo "# SHA256 Checksums" > checksums.txt
           echo "" >> checksums.txt
-          find artifacts -name "checksums.txt" -exec cat {} \; >> checksums.txt
+          find artifacts -name "checksums*.txt" -exec cat {} \; >> checksums.txt
           sort checksums.txt -o checksums.txt
 
       - name: Display structure of downloaded files
@@ -303,8 +544,13 @@ jobs:
         with:
           files: |
             artifacts/linux-x86_64/agent-rust-linux-x86_64.tar.gz
+            artifacts/linux-deb/*.deb
+            artifacts/linux-arm64/agent-rust-linux-arm64.tar.gz
+            artifacts/linux-arm64-deb/*.deb
             artifacts/macos-x86_64/agent-rust-macos-x86_64.tar.gz
             artifacts/macos-arm64/agent-rust-macos-arm64.tar.gz
+            artifacts/macos-dmg-x86_64/*.dmg
+            artifacts/macos-dmg-arm64/*.dmg
             artifacts/windows-x64/agent-rust-windows-x64.tar.gz
             artifacts/windows-installer/Agent-Setup.exe
             checksums.txt
@@ -331,11 +577,29 @@ jobs:
             irm https://raw.githubusercontent.com/ajariapps/agent-employe/main/install.ps1 | iex
             ```
 
+            ### 📦 Native Package Installers
+
+            **Linux (Debian/Ubuntu):**
+            ```bash
+            # Download and install .deb package
+            wget https://github.com/ajariapps/agent-employe/releases/download/${{ github.ref_name }}/agent-rust_${{ github.ref_name }}_amd64.deb
+            sudo dpkg -i agent-rust_${{ github.ref_name }}_amd64.deb
+            ```
+
+            **macOS (.dmg):**
+            1. Download the appropriate `.dmg` for your architecture (Intel or Apple Silicon)
+            2. Open the DMG and drag Agent.app to /Applications
+            3. Run the install script from the app's SharedSupport folder
+
+            **Windows (.exe):**
+            Download and run `Agent-Setup.exe` for a guided installation
+
             ### 📦 Manual Download
 
-            - **Linux x64**: `agent-rust-linux-x86_64.tar.gz`
-            - **macOS Intel**: `agent-rust-macos-x86_64.tar.gz`
-            - **macOS Apple Silicon**: `agent-rust-macos-arm64.tar.gz`
+            - **Linux x64**: `agent-rust-linux-x86_64.tar.gz` or `.deb`
+            - **Linux ARM64**: `agent-rust-linux-arm64.tar.gz` or `.deb`
+            - **macOS Intel**: `agent-rust-macos-x86_64.tar.gz` or `.dmg`
+            - **macOS Apple Silicon**: `agent-rust-macos-arm64.tar.gz` or `.dmg`
             - **Windows**: `Agent-Setup.exe` (recommended) or `agent-rust-windows-x64.tar.gz`
 
             ### 📋 Verification

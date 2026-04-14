@@ -1,0 +1,98 @@
+#!/bin/bash
+# postinst script for agent-rust
+#
+# This script executes after the package is installed
+
+set -e
+
+case "$1" in
+    configure)
+        # Create dedicated system user and group if they don't exist
+        if ! id agent &>/dev/null; then
+            echo "Creating agent user and group..."
+            useradd --system --home-dir /var/lib/agent-rust --shell /usr/sbin/nologin agent || true
+        fi
+
+        # Create required directories
+        echo "Creating required directories..."
+        mkdir -p /var/lib/agent-rust
+        mkdir -p /var/log/agent-rust
+        mkdir -p /run/agent-rust
+
+        # Set ownership and permissions
+        echo "Setting permissions..."
+        chown -R agent:agent /var/lib/agent-rust
+        chown -R agent:agent /var/log/agent-rust
+        chown -R agent:agent /run/agent-rust
+        chmod 750 /var/lib/agent-rust
+        chmod 750 /var/log/agent-rust
+        chmod 755 /run/agent-rust
+
+        # Set config file permissions
+        if [ -f /etc/agent-rust/config.toml ]; then
+            chmod 640 /etc/agent-rust/config.toml
+            chown root:agent /etc/agent-rust/config.toml
+        fi
+
+        # Check if configuration is needed (first install)
+        if ! grep -q 'url = "http://' /etc/agent-rust/config.toml 2>/dev/null || \
+           grep -q 'url = "http://localhost:8080"' /etc/agent-rust/config.toml; then
+            echo ""
+            echo "============================================"
+            echo "  Agent Configuration Required"
+            echo "============================================"
+            echo ""
+            echo "Please enter your server URL:"
+            read -p "Server URL (e.g., http://server:8080): " server_url
+
+            if [ -n "$server_url" ]; then
+                sed -i "s|url = \"http://localhost:8080\"|url = \"$server_url\"|" /etc/agent-rust/config.toml
+                echo "Configuration updated successfully."
+            else
+                echo "WARNING: Server URL not configured. Please edit /etc/agent-rust/config.toml manually."
+            fi
+        fi
+
+        # Reload systemd and enable service
+        echo "Enabling and starting agent-rust service..."
+        systemctl daemon-reload
+        systemctl enable agent-rust.service
+
+        # Check if this is an upgrade or fresh install
+        if [ -z "$2" ]; then
+            # Fresh install - start the service
+            echo "Starting agent-rust service..."
+            systemctl start agent-rust.service
+        else
+            # Upgrade - restart if it was running
+            if systemctl is-active --quiet agent-rust.service; then
+                echo "Restarting agent-rust service after upgrade..."
+                systemctl restart agent-rust.service
+            else
+                echo "Agent service was not running, not starting after upgrade."
+            fi
+        fi
+
+        echo ""
+        echo "============================================"
+        echo "  Agent Installation Complete"
+        echo "============================================"
+        echo ""
+        echo "Service Status:"
+        systemctl status agent-rust.service --no-pager || true
+        echo ""
+        echo "Configuration file: /etc/agent-rust/config.toml"
+        echo "Logs: journalctl -u agent-rust -f"
+        echo ""
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

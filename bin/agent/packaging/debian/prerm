@@ -1,0 +1,32 @@
+#!/bin/bash
+# prerm script for agent-rust
+#
+# This script executes before the package is removed or upgraded
+
+set -e
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        # Stop the service before removal/upgrade
+        if systemctl is-active --quiet agent-rust.service; then
+            echo "Stopping agent-rust service..."
+            systemctl stop agent-rust.service
+        fi
+
+        # Disable the service
+        if systemctl is-enabled --quiet agent-rust.service; then
+            echo "Disabling agent-rust service..."
+            systemctl disable agent-rust.service
+        fi
+        ;;
+
+    failed-upgrade)
+        ;;
+
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

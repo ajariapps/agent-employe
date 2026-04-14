@@ -45,3 +45,34 @@ tokio = { workspace = true, features = ["signal"] }
 [target.'cfg(windows)'.dependencies]
 tokio = { workspace = true, features = ["signal"] }
 windows-sys = "0.59"
+
+[package.metadata.deb]
+name = "agent-rust"
+maintainer = "Employee Monitoring Team <support@ajariapps.com>"
+copyright = "2026, Ajari Apps"
+license-file = ["LICENSE", "0"]
+depends = "$auto, libx11-6, libxrandr2, libxext6, libxcb-render0, libxcb-shape0"
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/agent", "usr/local/bin/", "755"],
+    ["../../scripts/agent-rust.service", "lib/systemd/system/", "644"],
+    ["../../config.example.toml", "etc/agent-rust/config.toml", "640"],
+    ["../../README.md", "usr/share/doc/agent-rust/", "644"]
+]
+conf-files = [
+    "etc/agent-rust/config.toml"
+]
+maintainer-scripts = "packaging/debian/"
+extended-description = """\
+Employee Monitoring Agent is a cross-platform background service that tracks
+employee activity including screenshots, idle time, and heartbeats. It sends
+data to a central server for monitoring and reporting purposes.
+
+Features:
+- Screenshot capture at configurable intervals
+- Activity and idle time tracking
+- Heartbeat monitoring
+- Automatic updates
+- Cross-platform support (Linux, macOS, Windows)
+"""

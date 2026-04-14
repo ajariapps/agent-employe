@@ -1,0 +1,43 @@
+#!/bin/bash
+# postrm script for agent-rust
+#
+# This script executes after the package is removed
+
+set -e
+
+case "$1" in
+    purge)
+        # Remove user and group on purge (not on remove)
+        if id agent &>/dev/null; then
+            echo "Removing agent user and group..."
+            userdel agent || true
+        fi
+
+        # Remove directories on purge
+        echo "Removing agent directories..."
+        rm -rf /var/lib/agent-rust
+        rm -rf /var/log/agent-rust
+        rm -rf /run/agent-rust
+
+        # Remove systemd service file
+        if [ -f /lib/systemd/system/agent-rust.service ]; then
+            rm -f /lib/systemd/system/agent-rust.service
+            systemctl daemon-reload
+        fi
+
+        echo "Agent completely removed."
+        ;;
+
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        # Don't remove data/config on simple remove (keeps for reinstall)
+        echo "Agent package removed. Configuration and data preserved."
+        echo "To completely remove, run: sudo apt purge agent-rust"
+        ;;
+
+    *)
+        echo "postrm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0
